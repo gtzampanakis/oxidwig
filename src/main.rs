@@ -9,9 +9,9 @@ type File = i8;
 type Rank = i8;
 type Color = i8;
 
-const COLOR_WHITE: Color = 0;
-const COLOR_BLACK: Color = 1;
-const COLOR_EMPTY: Color = 2;
+const COLOR_WHITE: Color = 1;
+const COLOR_BLACK: Color = -1;
+const COLOR_EMPTY: Color = 0;
 
 const P_BASE: Piece = 1;
 const R_BASE: Piece = 2;
@@ -536,13 +536,93 @@ fn apply_dir_nul(fr: &mut FileRank) -> bool {
     apply_dir_u(fr) || apply_dir_u(fr) || apply_dir_l(fr)
 }
 
+fn for_each_legal_sq_for_pawn(
+    pos: &Position, sq: Sq, fr0: &FileRank, color: Color, func: fn(Sq)
+) {
+    let mut fr = FileRank{f: fr0.f, r: fr0.r};
+    if color == COLOR_WHITE {
+        // One forward.
+        apply_dir_u(&mut fr);
+        {
+            let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
+            if piece_found == E {
+                func(filerank_to_sq(&fr));
+            }
+        }
+        if fr0.r == 1 {
+            // Two forward.
+            apply_dir_u(&mut fr);
+            let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
+            if piece_found == E {
+                func(filerank_to_sq(&fr));
+            }
+        }
+        // Captures
+        {
+            fr = FileRank{f: fr0.f, r: fr0.r};
+            apply_dir_ur(&mut fr);
+            let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
+            if piece_color(piece_found) == -color {
+                func(filerank_to_sq(&fr));
+            }
+        }
+        {
+            fr = FileRank{f: fr0.f, r: fr0.r};
+            apply_dir_ul(&mut fr);
+            let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
+            if piece_color(piece_found) == -color {
+                func(filerank_to_sq(&fr));
+            }
+        }
+    } else {
+        // One forward.
+        apply_dir_d(&mut fr);
+        {
+            let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
+            if piece_found == E {
+                func(filerank_to_sq(&fr));
+            }
+        }
+        if fr0.r == 6 {
+            // Two forward.
+            apply_dir_d(&mut fr);
+            let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
+            if piece_found == E {
+                func(filerank_to_sq(&fr));
+            }
+        }
+        // Captures
+        {
+            fr = FileRank{f: fr0.f, r: fr0.r};
+            apply_dir_dr(&mut fr);
+            let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
+            if piece_color(piece_found) == -color {
+                func(filerank_to_sq(&fr));
+            }
+        }
+        {
+            fr = FileRank{f: fr0.f, r: fr0.r};
+            apply_dir_dl(&mut fr);
+            let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
+            if piece_color(piece_found) == -color {
+                func(filerank_to_sq(&fr));
+            }
+        }
+    }
+}
+
 fn for_each_legal_sq_from_sq(
     pos: &Position, sq: Sq, func: fn(Sq)
 ) {
     let fr0 = sq_to_filerank(sq);
     let piece = piece_at_sq(pos, sq);
     let color = piece_color(piece);
-    let apply_funcs = match piece % E {
+    let piece_base = piece % E;
+    if piece_base == P_BASE {
+        for_each_legal_sq_for_pawn(pos, sq, &fr0, color, func);
+        return;
+    }
+    let apply_funcs = match piece_base {
         R_BASE => vec![apply_dir_u, apply_dir_r, apply_dir_d, apply_dir_l],
         B_BASE => vec![apply_dir_ur, apply_dir_dr, apply_dir_dl, apply_dir_ul],
         Q_BASE => vec![
@@ -575,7 +655,7 @@ fn for_each_legal_sq_from_sq(
                 func(filerank_to_sq(&fr));
                 break;
             }
-            match piece % E {
+            match piece_base {
                 N_BASE => { break; },
                 K_BASE => { break; },
                 _ => {},
@@ -587,7 +667,7 @@ fn for_each_legal_sq_from_sq(
 
 fn main() {
     let pos = decode_fen(String::from(
-        "8/8/8/8/8/8/8/N7 w - - 0 1"));
+        "8/8/8/8/8/8/1r6/P7 w - - 0 1"));
     let sq = fr_to_sq(0, 0);
     fn print_sq(sq: Sq) {
         println!("{}", sq_to_algstring(sq));
