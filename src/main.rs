@@ -168,6 +168,7 @@ fn piece_at_sq(pos: &Position, sq: Sq) -> Piece {
 }
 
 fn set_piece_at_sq(pos: &mut Position, sq: Sq, piece: Piece) {
+    //println!("Setting {} to {}, ({})", piece, sq, sq_to_algstring(sq));
     pos.placement[sq as usize] = piece;
 }
 
@@ -249,52 +250,6 @@ fn is_move_capture(pos: &Position, mov: &Move) -> bool {
     is_there_piece_at_sq(pos, mov.to)
 }
 
-//fn move_to_alg(pos: &Position, mov: &Move) -> String {
-//    let piece_moving = mov.piece;
-//    let sq_from = mov.from; 
-//    let sq_to = mov.to;
-//    let algsq = sq_to_algsq(sq_to);
-//    let is_capture = is_move_capture(pos, mov);
-//    let capture_str = String::from(
-//        match is_capture {
-//            true => "x",
-//            false => "",
-//        }
-//    );
-//    let piece_moving_str = match piece_moving % E {
-//        P_BASE => match is_capture {
-//            true => f_to_string(
-//                        sq_to_filerank(sq_from).f),
-//            false => String::from(""),
-//        },
-//        N_BASE => String::from("N"),
-//        B_BASE => String::from("B"),
-//        Q_BASE => String::from("Q"),
-//        R_BASE => String::from("R"),
-//        K_BASE => String::from("K"),
-//        _ => panic!("Unexpected!"),
-//    };
-//
-//    for sq in 0..64 {
-//        let piece = piece_at_sq(pos, sq);
-//        if piece % E != P_BASE {
-//            if piece != piece_moving {
-//                if (
-//                    sq_to_filerank(sq).f
-//                        ==
-//                    sq_to_filerank(sq_from).f
-//                ) {
-//                    if sq != sq_from {
-//                    }
-//                }
-//            }
-//        }
-//    }
-//
-//    String::from("foo")
-//}
-//
-
 fn is_piece_white(piece: Piece) -> bool {
     piece < E
 }
@@ -339,30 +294,54 @@ fn decode_fen(fen_string: String) -> Position {
             state += 1;
         } else if state == 0 {
             match c {
-                'r' => set_piece_at_sq(
-                                &mut p, fr_to_sq(f, r), R_BLACK),
-                'n' => set_piece_at_sq(
-                                &mut p, fr_to_sq(f, r), N_BLACK),
-                'b' => set_piece_at_sq(
-                                &mut p, fr_to_sq(f, r), B_BLACK),
-                'q' => set_piece_at_sq(
-                                &mut p, fr_to_sq(f, r), Q_BLACK),
-                'k' => set_piece_at_sq(
-                                &mut p, fr_to_sq(f, r), K_BLACK),
-                'p' => set_piece_at_sq(
-                                &mut p, fr_to_sq(f, r), P_BLACK),
-                'R' => set_piece_at_sq(
-                                &mut p, fr_to_sq(f, r), R_WHITE),
-                'N' => set_piece_at_sq(
-                                &mut p, fr_to_sq(f, r), N_WHITE),
-                'B' => set_piece_at_sq(
-                                &mut p, fr_to_sq(f, r), B_WHITE),
-                'Q' => set_piece_at_sq(
-                                &mut p, fr_to_sq(f, r), Q_WHITE),
-                'K' => set_piece_at_sq(
-                                &mut p, fr_to_sq(f, r), K_WHITE),
-                'P' => set_piece_at_sq(
-                                &mut p, fr_to_sq(f, r), P_WHITE),
+                'r' => {
+                    set_piece_at_sq(&mut p, fr_to_sq(f, r), R_BLACK);
+                    f += 1;
+                },
+                'n' => {
+                    set_piece_at_sq(&mut p, fr_to_sq(f, r), N_BLACK);
+                    f += 1;
+                },
+                'b' => {
+                    set_piece_at_sq(&mut p, fr_to_sq(f, r), B_BLACK);
+                    f += 1;
+                },
+                'q' => {
+                    set_piece_at_sq(&mut p, fr_to_sq(f, r), Q_BLACK);
+                    f += 1;
+                },
+                'k' => {
+                    set_piece_at_sq(&mut p, fr_to_sq(f, r), K_BLACK);
+                    f += 1;
+                },
+                'p' => {
+                    set_piece_at_sq(&mut p, fr_to_sq(f, r), P_BLACK);
+                    f += 1;
+                },
+                'R' => {
+                    set_piece_at_sq(&mut p, fr_to_sq(f, r), R_WHITE);
+                    f += 1;
+                },
+                'N' => {
+                    set_piece_at_sq(&mut p, fr_to_sq(f, r), N_WHITE);
+                    f += 1;
+                },
+                'B' => {
+                    set_piece_at_sq(&mut p, fr_to_sq(f, r), B_WHITE);
+                    f += 1;
+                },
+                'Q' => {
+                    set_piece_at_sq(&mut p, fr_to_sq(f, r), Q_WHITE);
+                    f += 1;
+                },
+                'K' => {
+                    set_piece_at_sq(&mut p, fr_to_sq(f, r), K_WHITE);
+                    f += 1;
+                },
+                'P' => {
+                    set_piece_at_sq(&mut p, fr_to_sq(f, r), P_WHITE);
+                    f += 1;
+                },
                 '1' => { f += 1 },
                 '2' => { f += 2 },
                 '3' => { f += 3 },
@@ -410,21 +389,6 @@ fn decode_fen(fen_string: String) -> Position {
     p
 }
 
-fn legal_moves_from_sq(pos: &Position, sq: Sq) -> Vec<Move> {
-    let piece = piece_at_sq(pos, sq);
-    let color = piece_color(piece);
-    let base = piece_base(piece);
-    match base {
-        //P_BASE => legal_moves_for_pawn(pos, sq, color),
-        //R_BASE => legal_moves_for_rook(pos, sq, color),
-        //N_BASE => legal_moves_for_knight(pos, sq, color),
-        //B_BASE => legal_moves_for_bishop(pos, sq, color),
-        //Q_BASE => legal_moves_for_queen(pos, sq, color),
-        //K_BASE => legal_moves_for_king(pos, sq, color),
-        _ => panic!("Unexpected!"),
-    }
-}
-
 fn next_sq_in_dir(sq: Sq, dir:Direction) -> Option<Sq> {
     let filerank = sq_to_filerank(sq);
     let mut f = filerank.f;
@@ -455,45 +419,6 @@ fn next_sq_in_dir(sq: Sq, dir:Direction) -> Option<Sq> {
         Some(fr_to_sq(f, r))
     }
 }
-
-//fn for_each_sq_in_dir(
-//        sq: Sq,
-//        dir:Direction,
-//        func: fn(Sq)
-//) {
-//    let filerank = sq_to_filerank(sq);
-//    let mut f = filerank.f;
-//    let mut r = filerank.r;
-//    let mut n_dir = false;
-//    loop {
-//        match dir {
-//            DIR_U => { r += 1; },
-//            DIR_R => { f += 1 },
-//            DIR_D => { r -= 1 },
-//            DIR_L => { f -= 1 },
-//            DIR_UR => { r += 1; f += 1 },
-//            DIR_DR => { r -= 1; f += 1 },
-//            DIR_DL => { r -= 1; f -= 1 },
-//            DIR_UL => { r += 1; f -= 1 },
-//            DIR_NUR => { n_dir = true; r += 2; f += 1 },
-//            DIR_NRU => { n_dir = true; f += 2; r += 1 },
-//            DIR_NRD => { n_dir = true; f += 2; r -= 1 },
-//            DIR_NDR => { n_dir = true; r -= 2; f += 1 },
-//            DIR_NDL => { n_dir = true; r -= 2; f -= 1 },
-//            DIR_NLD => { n_dir = true; f -= 2; r -= 1 },
-//            DIR_NLU => { n_dir = true; f -= 2; r += 1 },
-//            DIR_NUL => { n_dir = true; r += 2; f -= 1 },
-//            _ => panic!("Unexpected!"),
-//        };
-//        if n_dir || f < 0 || f > 7 || r < 0 || r > 7 {
-//            break;
-//        } else {
-//            if func(fr_to_sq(f, r)) {
-//                break;
-//            };
-//        }
-//    }
-//}
 
 fn apply_dir_u(fr: &mut FileRank) -> bool { fr.r += 1; fr.r > 7 }
 fn apply_dir_r(fr: &mut FileRank) -> bool { fr.f += 1; fr.f > 7 }
@@ -622,7 +547,7 @@ fn for_each_legal_sq_from_sq(
         for_each_legal_sq_for_pawn(pos, sq, &fr0, color, func);
         return;
     }
-    let apply_funcs = match piece_base {
+    let apply_dir_funcs = match piece_base {
         R_BASE => vec![apply_dir_u, apply_dir_r, apply_dir_d, apply_dir_l],
         B_BASE => vec![apply_dir_ur, apply_dir_dr, apply_dir_dl, apply_dir_ul],
         Q_BASE => vec![
@@ -639,10 +564,10 @@ fn for_each_legal_sq_from_sq(
         ],
         _ => panic!("Unexpected!"),
     };
-    for apply_func in apply_funcs {
+    for apply_dir_func in apply_dir_funcs {
         let mut fr = FileRank{f: fr0.f, r: fr0.r};
         loop {
-            if apply_func(&mut fr) {
+            if apply_dir_func(&mut fr) {
                 break;
             }
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
@@ -664,14 +589,14 @@ fn for_each_legal_sq_from_sq(
     }
 }
 
+fn print_sq(sq: Sq) {
+    println!("{}", sq_to_algstring(sq));
+}
 
 fn main() {
-    let pos = decode_fen(String::from(
-        "8/8/8/8/8/8/1r6/P7 w - - 0 1"));
-    let sq = fr_to_sq(0, 0);
-    fn print_sq(sq: Sq) {
-        println!("{}", sq_to_algstring(sq));
-    }
+    let starting_fen =
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    let pos = decode_fen(String::from(starting_fen));
+    let sq = fr_to_sq(1, 0);
     for_each_legal_sq_from_sq(&pos, sq, print_sq);
-    println!("Hello world!");
 }
