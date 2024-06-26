@@ -142,6 +142,8 @@ struct FileRank {
     r: Rank,
 }
 
+#[derive(Clone)]
+#[derive(Copy)]
 struct Move {
     piece: Piece,
     from: Sq,
@@ -461,9 +463,9 @@ fn apply_dir_nul(fr: &mut FileRank) -> bool {
     apply_dir_u(fr) || apply_dir_u(fr) || apply_dir_l(fr)
 }
 
-fn for_each_legal_sq_for_pawn(
+fn add_legal_sqs_from_sq_for_pawn(
     pos: &Position, sq: Sq, fr0: &FileRank,
-    color: Color, mut func: impl FnMut(Sq)
+    color: Color, v: &mut Vec<Sq>
 ) {
     let mut fr = FileRank{f: fr0.f, r: fr0.r};
     if color == COLOR_WHITE {
@@ -472,7 +474,7 @@ fn for_each_legal_sq_for_pawn(
         {
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_found == E {
-                func(filerank_to_sq(&fr));
+                v.push(filerank_to_sq(&fr));
             }
         }
         if fr0.r == 1 {
@@ -480,7 +482,7 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_u(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_found == E {
-                func(filerank_to_sq(&fr));
+                v.push(filerank_to_sq(&fr));
             }
         }
         // Captures
@@ -489,7 +491,7 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_ur(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                func(filerank_to_sq(&fr));
+                v.push(filerank_to_sq(&fr));
             }
         }
         {
@@ -497,7 +499,7 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_ul(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                func(filerank_to_sq(&fr));
+                v.push(filerank_to_sq(&fr));
             }
         }
     } else {
@@ -506,7 +508,7 @@ fn for_each_legal_sq_for_pawn(
         {
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_found == E {
-                func(filerank_to_sq(&fr));
+                v.push(filerank_to_sq(&fr));
             }
         }
         if fr0.r == 6 {
@@ -514,7 +516,7 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_d(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_found == E {
-                func(filerank_to_sq(&fr));
+                v.push(filerank_to_sq(&fr));
             }
         }
         // Captures
@@ -523,7 +525,7 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_dr(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                func(filerank_to_sq(&fr));
+                v.push(filerank_to_sq(&fr));
             }
         }
         {
@@ -531,21 +533,21 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_dl(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                func(filerank_to_sq(&fr));
+                v.push(filerank_to_sq(&fr));
             }
         }
     }
 }
 
-fn for_each_legal_sq_from_sq(
-    pos: &Position, sq: Sq, mut func: impl FnMut(Sq)
+fn add_legal_sqs_from_sq(
+    pos: &Position, sq: Sq, v: &mut Vec<Sq>
 ) {
     let fr0 = sq_to_filerank(sq);
     let piece = piece_at_sq(pos, sq);
     let color = piece_color(piece);
     let piece_base = piece % E;
     if piece_base == P_BASE {
-        for_each_legal_sq_for_pawn(pos, sq, &fr0, color, func);
+        add_legal_sqs_from_sq_for_pawn(pos, sq, &fr0, color, v);
         return;
     }
     let apply_dir_funcs = match piece_base {
@@ -574,11 +576,11 @@ fn for_each_legal_sq_from_sq(
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             let piece_found_color = piece_color(piece_found);
             if piece_found_color == COLOR_EMPTY {
-                func(filerank_to_sq(&fr));
+                v.push(filerank_to_sq(&fr));
             } else if piece_found_color == color {
                 break;
             } else {
-                func(filerank_to_sq(&fr));
+                v.push(filerank_to_sq(&fr));
                 break;
             }
             match piece_base {
@@ -590,18 +592,20 @@ fn for_each_legal_sq_from_sq(
     }
 }
 
-fn for_each_legal_move_from_position(pos: &Position, mut func: impl FnMut(Move)) {
+fn add_legal_moves_from_position(pos: &Position, v: &mut Vec::<Move>) {
     for sq in 0 .. 64 {
         let piece_found = piece_at_sq(pos, sq);
         let piece_found_color = piece_color(piece_found);
+        let mut v_sq = Vec::<Sq>::new();
         if piece_found_color == pos.active_color {
-            for_each_legal_sq_from_sq(
+            add_legal_sqs_from_sq(
                 &pos,
                 sq,
-                |sq_to: Sq| {
-                    func(Move{piece: piece_found, from: sq, to: sq_to})
-                }
+                &mut v_sq
             );
+        }
+        for sq_to in v_sq.iter() {
+            v.push(Move{piece: piece_found, from: sq, to: *sq_to})
         }
     }
 }
@@ -662,30 +666,29 @@ fn position_value_at_ply(pos: &Position, ply: u32) -> Option<i32> {
     } else {
         let mut best_value: Option<i32> = None;
         let mut best_move: Option<Move> = None;
-        for_each_legal_move_from_position(
-            pos,
-            |mov| {
-                let new_pos = position_after_move(pos, &mov);
-                 match position_value_at_ply(&new_pos, ply-1) {
-                     Some(v) => {
-                        let new_v = v * pos.active_color; 
-                        match best_value {
-                            Some(bv) => {
-                                if new_v > bv {
-                                    best_value = Some(new_v);
-                                    best_move = Some(mov);
-                                }
-                            },
-                            None => {
+        let mut v = Vec::<Move>::new();
+        add_legal_moves_from_position(pos, &mut v);
+        for mov in v.iter() {
+            let new_pos = position_after_move(pos, mov);
+             match position_value_at_ply(&new_pos, ply-1) {
+                 Some(v) => {
+                    let new_v = v * pos.active_color; 
+                    match best_value {
+                        Some(bv) => {
+                            if new_v > bv {
                                 best_value = Some(new_v);
-                                best_move = Some(mov);
-                            },
-                        }
-                    },
-                     None => {},
-                };
-            }
-        );
+                                best_move = Some(*mov);
+                            }
+                        },
+                        None => {
+                            best_value = Some(new_v);
+                            best_move = Some(*mov);
+                        },
+                    }
+                },
+                 None => {},
+            };
+        }
         best_value
     }
 }
@@ -694,6 +697,6 @@ fn main() {
     let starting_fen =
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     let pos = decode_fen(String::from(starting_fen));
-    position_value_at_ply(&pos, 6);
+    println!("{}", position_value_at_ply(&pos, 6).unwrap());
     println!("Done");
 }
