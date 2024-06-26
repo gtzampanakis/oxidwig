@@ -7,7 +7,7 @@ type Piece = i8;
 type Direction = i8;
 type File = i8;
 type Rank = i8;
-type Color = i8;
+type Color = i32;
 
 const COLOR_WHITE: Color = 1;
 const COLOR_BLACK: Color = -1;
@@ -462,7 +462,8 @@ fn apply_dir_nul(fr: &mut FileRank) -> bool {
 }
 
 fn for_each_legal_sq_for_pawn(
-    pos: &Position, sq: Sq, fr0: &FileRank, color: Color, func: fn(Sq)
+    pos: &Position, sq: Sq, fr0: &FileRank,
+    color: Color, mut func: impl FnMut(Sq)
 ) {
     let mut fr = FileRank{f: fr0.f, r: fr0.r};
     if color == COLOR_WHITE {
@@ -537,7 +538,7 @@ fn for_each_legal_sq_for_pawn(
 }
 
 fn for_each_legal_sq_from_sq(
-    pos: &Position, sq: Sq, func: fn(Sq)
+    pos: &Position, sq: Sq, mut func: impl FnMut(Sq)
 ) {
     let fr0 = sq_to_filerank(sq);
     let piece = piece_at_sq(pos, sq);
@@ -589,14 +590,110 @@ fn for_each_legal_sq_from_sq(
     }
 }
 
+fn for_each_legal_move_from_position(pos: &Position, mut func: impl FnMut(Move)) {
+    for sq in 0 .. 64 {
+        let piece_found = piece_at_sq(pos, sq);
+        let piece_found_color = piece_color(piece_found);
+        if piece_found_color == pos.active_color {
+            for_each_legal_sq_from_sq(
+                &pos,
+                sq,
+                |sq_to: Sq| {
+                    func(Move{piece: piece_found, from: sq, to: sq_to})
+                }
+            );
+        }
+    }
+}
+
 fn print_sq(sq: Sq) {
     println!("{}", sq_to_algstring(sq));
+}
+
+fn print_move(mov: Move) {
+    println!("Move from {} to {}",
+                sq_to_algstring(mov.from),
+                sq_to_algstring(mov.to));
+}
+
+fn position_after_move(pos: &Position, mov: &Move) -> Position {
+    let mut new_placement: [Piece; 64] = [0; 64];
+    new_placement.copy_from_slice(&pos.placement);
+    Position{
+        placement: new_placement,
+        active_color: -pos.active_color,
+        castling: pos.castling,
+        en_passant: pos.en_passant,
+        halfmoves: pos.halfmoves, //TODO
+        fullmoves: pos.fullmoves, // TODO
+    }
+}
+
+fn position_static_value(pos: &Position) -> i32 {
+    let mut result = 0;
+    for f in 0 .. 8 {
+        for r in 0 .. 8 {
+            let sq = fr_to_sq(f, r);
+            let piece_found = piece_at_sq(pos, sq);
+            result += match piece_found {
+                R_WHITE =>  5,
+                R_BLACK => -5,
+                N_WHITE =>  3,
+                N_BLACK => -3,
+                B_WHITE =>  3,
+                B_BLACK => -3,
+                Q_WHITE =>  9,
+                Q_BLACK => -9,
+                P_WHITE =>  1,
+                P_BLACK => -1,
+                K_WHITE =>  9999,
+                K_BLACK => -9999,
+                E => 0,
+                _ => panic!("Unexpected"),
+            };
+        }
+    }
+    result
+}
+
+fn position_value_at_ply(pos: &Position, ply: u32) -> Option<i32> {
+    if ply == 0 {
+        Some(position_static_value(pos))
+    } else {
+        let mut best_value: Option<i32> = None;
+        let mut best_move: Option<Move> = None;
+        for_each_legal_move_from_position(
+            pos,
+            |mov| {
+                let new_pos = position_after_move(pos, &mov);
+                 match position_value_at_ply(&new_pos, ply-1) {
+                     Some(v) => {
+                        let new_v = v * pos.active_color; 
+                        match best_value {
+                            Some(bv) => {
+                                if new_v > bv {
+                                    best_value = Some(new_v);
+                                    best_move = Some(mov);
+                                }
+                            },
+                            None => {
+                                best_value = Some(new_v);
+                                best_move = Some(mov);
+                            },
+                        }
+                    },
+                     None => {},
+                };
+            }
+        );
+        best_value
+    }
 }
 
 fn main() {
     let starting_fen =
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     let pos = decode_fen(String::from(starting_fen));
-    let sq = fr_to_sq(1, 0);
-    for_each_legal_sq_from_sq(&pos, sq, print_sq);
+    position_value_at_ply(&pos, 6);
+    println!("Done");
 }
