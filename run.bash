@@ -6,4 +6,4 @@ echo
 echo
 echo
 date
-cargo run
+time cargo run --release
