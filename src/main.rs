@@ -1,13 +1,17 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use std::collections::HashMap;
+
 type Sq = i8;
 type AlgSq = [String; 2];
 type Piece = i8;
 type Direction = i8;
 type File = i8;
 type Rank = i8;
-type Color = i32;
+type Color = i8;
+type Ply = u32;
+type Val = f64;
 
 const COLOR_WHITE: Color = 1;
 const COLOR_BLACK: Color = -1;
@@ -20,19 +24,19 @@ const B_BASE: Piece = 4;
 const Q_BASE: Piece = 5;
 const K_BASE: Piece = 6;
 
+const EMPTY: Piece = 0;
 const P_WHITE: Piece = P_BASE;
 const R_WHITE: Piece = R_BASE;
 const N_WHITE: Piece = N_BASE;
 const B_WHITE: Piece = B_BASE;
 const Q_WHITE: Piece = Q_BASE;
 const K_WHITE: Piece = K_BASE;
-const E: Piece = 9;
-const P_BLACK: Piece = E + P_BASE;
-const R_BLACK: Piece = E + R_BASE;
-const N_BLACK: Piece = E + N_BASE;
-const B_BLACK: Piece = E + B_BASE;
-const Q_BLACK: Piece = E + Q_BASE;
-const K_BLACK: Piece = E + K_BASE;
+const P_BLACK: Piece = -P_BASE;
+const R_BLACK: Piece = -R_BASE;
+const N_BLACK: Piece = -N_BASE;
+const B_BLACK: Piece = -B_BASE;
+const Q_BLACK: Piece = -Q_BASE;
+const K_BLACK: Piece = -K_BASE;
 
 const DIR_U: Direction = 0;
 const DIR_R: Direction = 1;
@@ -117,6 +121,13 @@ fn piece_to_char(piece: Piece) -> char {
     }
 }
 
+struct MoveVal {
+    mov: Option<Move>,
+    val: Val,
+    checkmate: bool,
+    leads_to: Option<Position>,
+}
+
 struct Position {
     placement: [Piece; 64],
     active_color: Color,
@@ -124,16 +135,18 @@ struct Position {
     en_passant: Option<Sq>,
     halfmoves: i32,
     fullmoves: i32,
+    evaluation: Option<HashMap<Ply, Vec<MoveVal>>>,
 }
 
 fn empty_position() -> Position {
     Position{
-        placement: [E; 64],
+        placement: [EMPTY; 64],
         active_color: COLOR_WHITE,
         castling: [false; 4],
         en_passant: None,
         halfmoves: 0,
         fullmoves: 0,
+        evaluation: None,
     }
 }
 
@@ -243,7 +256,7 @@ fn sq_to_algstring(sq: Sq) -> String {
 fn is_there_piece_at_sq(
     pos: &Position, sq: Sq
 ) -> bool {
-    piece_at_sq(pos, sq) != E
+    piece_at_sq(pos, sq) != EMPTY
 }
 
 fn is_move_capture(pos: &Position, mov: &Move) -> bool {
@@ -251,11 +264,11 @@ fn is_move_capture(pos: &Position, mov: &Move) -> bool {
 }
 
 fn is_piece_white(piece: Piece) -> bool {
-    piece < E
+    piece > EMPTY
 }
 
 fn is_piece_black(piece: Piece) -> bool {
-    piece > E
+    piece < EMPTY
 }
 
 fn piece_color(piece: Piece) -> Color {
@@ -269,7 +282,7 @@ fn piece_color(piece: Piece) -> Color {
 }
 
 fn piece_base(piece: Piece) -> Piece {
-    piece % E
+    piece.abs()
 }
 
 fn toggled_color(color: Color) -> Color {
@@ -463,24 +476,26 @@ fn apply_dir_nul(fr: &mut FileRank) -> bool {
 
 fn for_each_legal_sq_for_pawn(
     pos: &Position, sq: Sq, fr0: &FileRank,
-    color: Color, mut func: impl FnMut(Sq)
+    color: Color, mut func_for_sqs: impl FnMut(Sq),
+    mut func_for_captures: impl FnMut(Sq, Piece, Color) -> bool
 ) {
     let mut fr = FileRank{f: fr0.f, r: fr0.r};
     if color == COLOR_WHITE {
+        println!("foo");
         // One forward.
         apply_dir_u(&mut fr);
         {
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
-            if piece_found == E {
-                func(filerank_to_sq(&fr));
+            if piece_found == EMPTY {
+                func_for_sqs(filerank_to_sq(&fr));
             }
         }
         if fr0.r == 1 {
             // Two forward.
             apply_dir_u(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
-            if piece_found == E {
-                func(filerank_to_sq(&fr));
+            if piece_found == EMPTY {
+                func_for_sqs(filerank_to_sq(&fr));
             }
         }
         // Captures
@@ -489,7 +504,11 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_ur(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                func(filerank_to_sq(&fr));
+                func_for_captures(
+                    filerank_to_sq(&fr),
+                    piece_found, piece_color(piece_found)
+                );
+                func_for_sqs(filerank_to_sq(&fr));
             }
         }
         {
@@ -497,7 +516,11 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_ul(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                func(filerank_to_sq(&fr));
+                func_for_captures(
+                    filerank_to_sq(&fr),
+                    piece_found, piece_color(piece_found)
+                );
+                func_for_sqs(filerank_to_sq(&fr));
             }
         }
     } else {
@@ -505,16 +528,16 @@ fn for_each_legal_sq_for_pawn(
         apply_dir_d(&mut fr);
         {
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
-            if piece_found == E {
-                func(filerank_to_sq(&fr));
+            if piece_found == EMPTY {
+                func_for_sqs(filerank_to_sq(&fr));
             }
         }
         if fr0.r == 6 {
             // Two forward.
             apply_dir_d(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
-            if piece_found == E {
-                func(filerank_to_sq(&fr));
+            if piece_found == EMPTY {
+                func_for_sqs(filerank_to_sq(&fr));
             }
         }
         // Captures
@@ -523,7 +546,11 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_dr(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                func(filerank_to_sq(&fr));
+                func_for_captures(
+                    filerank_to_sq(&fr),
+                    piece_found, piece_color(piece_found)
+                );
+                func_for_sqs(filerank_to_sq(&fr));
             }
         }
         {
@@ -531,24 +558,36 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_dl(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                func(filerank_to_sq(&fr));
+                func_for_captures(
+                    filerank_to_sq(&fr),
+                    piece_found, piece_color(piece_found)
+                );
+                func_for_sqs(filerank_to_sq(&fr));
             }
         }
     }
 }
 
 fn for_each_legal_sq_from_sq(
-    pos: &Position, sq: Sq, mut func: impl FnMut(Sq)
+    pos: &Position, sq: Sq,
+    mut func_for_sqs: impl FnMut(Sq),
+    mut func_for_captures: impl FnMut(Sq, Piece, Color) -> bool,
+    piece_override: Option<Piece>,
 ) {
     let fr0 = sq_to_filerank(sq);
-    let piece = piece_at_sq(pos, sq);
+    let piece;
+    match piece_override {
+        Some(p) => { piece = p; },
+        None => { piece = piece_at_sq(pos, sq); },
+    }
     let color = piece_color(piece);
-    let piece_base = piece % E;
-    if piece_base == P_BASE {
-        for_each_legal_sq_for_pawn(pos, sq, &fr0, color, func);
+    let pb = piece_base(piece);
+    if pb == P_BASE {
+        for_each_legal_sq_for_pawn(
+            pos, sq, &fr0, color, func_for_sqs, func_for_captures);
         return;
     }
-    let apply_dir_funcs = match piece_base {
+    let apply_dir_funcs = match pb {
         R_BASE => vec![apply_dir_u, apply_dir_r, apply_dir_d, apply_dir_l],
         B_BASE => vec![apply_dir_ur, apply_dir_dr, apply_dir_dl, apply_dir_ul],
         Q_BASE => vec![
@@ -571,17 +610,21 @@ fn for_each_legal_sq_from_sq(
             if apply_dir_func(&mut fr) {
                 break;
             }
-            let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
+            let sq = filerank_to_sq(&fr);
+            let piece_found = piece_at_sq(pos, sq);
             let piece_found_color = piece_color(piece_found);
             if piece_found_color == COLOR_EMPTY {
-                func(filerank_to_sq(&fr));
+                func_for_sqs(sq);
             } else if piece_found_color == color {
                 break;
             } else {
-                func(filerank_to_sq(&fr));
+                if func_for_captures(piece_found, sq, piece_found_color) {
+                    return;
+                }
+                func_for_sqs(sq);
                 break;
             }
-            match piece_base {
+            match pb {
                 N_BASE => { break; },
                 K_BASE => { break; },
                 _ => {},
@@ -600,7 +643,11 @@ fn for_each_legal_move_from_position(pos: &Position, mut func: impl FnMut(Move))
                 sq,
                 |sq_to: Sq| {
                     func(Move{piece: piece_found, from: sq, to: sq_to})
-                }
+                },
+                |cap_sq: Sq, cap_piece: Piece, cap_color: Color| {
+                    return false;
+                },
+                None
             );
         }
     }
@@ -626,29 +673,30 @@ fn position_after_move(pos: &Position, mov: &Move) -> Position {
         en_passant: pos.en_passant,
         halfmoves: pos.halfmoves, //TODO
         fullmoves: pos.fullmoves, // TODO
+        evaluation: None,
     }
 }
 
-fn position_static_value(pos: &Position) -> i32 {
-    let mut result = 0;
+fn position_static_value(pos: &Position) -> Val {
+    let mut result = 0.0;
     for f in 0 .. 8 {
         for r in 0 .. 8 {
             let sq = fr_to_sq(f, r);
             let piece_found = piece_at_sq(pos, sq);
             result += match piece_found {
-                R_WHITE =>  5,
-                R_BLACK => -5,
-                N_WHITE =>  3,
-                N_BLACK => -3,
-                B_WHITE =>  3,
-                B_BLACK => -3,
-                Q_WHITE =>  9,
-                Q_BLACK => -9,
-                P_WHITE =>  1,
-                P_BLACK => -1,
-                K_WHITE =>  9999,
-                K_BLACK => -9999,
-                E => 0,
+                R_WHITE =>  5.0,
+                R_BLACK => -5.0,
+                N_WHITE =>  3.0,
+                N_BLACK => -3.0,
+                B_WHITE =>  3.0,
+                B_BLACK => -3.0,
+                Q_WHITE =>  9.0,
+                Q_BLACK => -9.0,
+                P_WHITE =>  1.0,
+                P_BLACK => -1.0,
+                K_WHITE =>  9999.0,
+                K_BLACK => -9999.0,
+                EMPTY => 0.0,
                 _ => panic!("Unexpected"),
             };
         }
@@ -656,44 +704,82 @@ fn position_static_value(pos: &Position) -> i32 {
     result
 }
 
-fn position_value_at_ply(pos: &Position, ply: u32) -> Option<i32> {
+fn is_king_in_check(pos: &Position) -> bool {
+    let king;
+    if pos.active_color == COLOR_WHITE { king = K_WHITE; }
+    else { king = K_BLACK; }
+
+    for f in 0 .. 8 {
+        for r in 0 .. 8 {
+            let sq = fr_to_sq(f, r);
+            let piece_found = piece_at_sq(pos, sq);
+            if piece_found == king {
+                return is_king_in_specific_sq_in_check(pos, sq);
+            }
+        }
+    }
+    false // For positions without king.
+}
+
+fn is_king_in_specific_sq_in_check(pos: &Position, sq: Sq) -> bool {
+    let mut result = false;
+    for p in [R_WHITE, N_WHITE, B_WHITE, Q_WHITE, P_WHITE] {
+        for_each_legal_sq_from_sq(
+            pos, sq,
+            |sq| { },
+            |cap_sq, cap_piece, cap_color| {
+                if cap_piece == (-p * pos.active_color) {
+                    result = true;
+                    // Return true to instruct
+                    // for_each_legal_sq_from_sq to stop.
+                    return true;
+                }
+                return false;
+            },
+            Some(p * pos.active_color),
+        );
+        if result {
+            return result;
+        }
+    }
+    result
+}
+
+fn position_val_at_ply(pos: &Position, ply: Ply) -> Vec<MoveVal> {
+    let mut v = Vec::<MoveVal>::new();
     if ply == 0 {
-        Some(position_static_value(pos))
+        v.push(MoveVal{
+            mov: None,
+            val: position_static_value(pos),
+            checkmate: false,
+            leads_to: None,
+        });
     } else {
-        let mut best_value: Option<i32> = None;
-        let mut best_move: Option<Move> = None;
         for_each_legal_move_from_position(
-            pos,
+            pos, 
             |mov| {
                 let new_pos = position_after_move(pos, &mov);
-                 match position_value_at_ply(&new_pos, ply-1) {
-                     Some(v) => {
-                        let new_v = v * pos.active_color; 
-                        match best_value {
-                            Some(bv) => {
-                                if new_v > bv {
-                                    best_value = Some(new_v);
-                                    best_move = Some(mov);
-                                }
-                            },
-                            None => {
-                                best_value = Some(new_v);
-                                best_move = Some(mov);
-                            },
-                        }
-                    },
-                     None => {},
-                };
+                v.push(MoveVal{
+                    mov: Some(mov),
+                    val: 0.0,
+                    checkmate: false,
+                    leads_to: Some(new_pos),
+                });
             }
         );
-        best_value
     }
+    v
 }
 
 fn main() {
     let starting_fen =
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    let pos = decode_fen(String::from(starting_fen));
-    position_value_at_ply(&pos, 6);
+    let empty_fen = "8/8/8/8/8/8/8/8 w - - 0 1";
+    let fen = "1q6/4k3/3P4/8/1B6/8/1K6/8 b - - 0 1";
+    let pos = decode_fen(String::from(fen));
+    //for move_val in position_val_at_ply(&pos, 0) {
+    //    println!("{}", move_val.val);
+    //}
+    println!("{}", is_king_in_check(&pos));
     println!("Done");
 }
