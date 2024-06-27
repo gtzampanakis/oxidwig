@@ -481,7 +481,6 @@ fn for_each_legal_sq_for_pawn(
 ) {
     let mut fr = FileRank{f: fr0.f, r: fr0.r};
     if color == COLOR_WHITE {
-        println!("foo");
         // One forward.
         apply_dir_u(&mut fr);
         {
@@ -504,10 +503,10 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_ur(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                func_for_captures(
+                if func_for_captures(
                     filerank_to_sq(&fr),
                     piece_found, piece_color(piece_found)
-                );
+                ) { return; }
                 func_for_sqs(filerank_to_sq(&fr));
             }
         }
@@ -516,10 +515,10 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_ul(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                func_for_captures(
+                if func_for_captures(
                     filerank_to_sq(&fr),
                     piece_found, piece_color(piece_found)
-                );
+                ) { return; }
                 func_for_sqs(filerank_to_sq(&fr));
             }
         }
@@ -546,10 +545,10 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_dr(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                func_for_captures(
+                if func_for_captures(
                     filerank_to_sq(&fr),
                     piece_found, piece_color(piece_found)
-                );
+                ) { return; }
                 func_for_sqs(filerank_to_sq(&fr));
             }
         }
@@ -558,10 +557,10 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_dl(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                func_for_captures(
+                if func_for_captures(
                     filerank_to_sq(&fr),
                     piece_found, piece_color(piece_found)
-                );
+                ) { return; }
                 func_for_sqs(filerank_to_sq(&fr));
             }
         }
@@ -618,7 +617,7 @@ fn for_each_legal_sq_from_sq(
             } else if piece_found_color == color {
                 break;
             } else {
-                if func_for_captures(piece_found, sq, piece_found_color) {
+                if func_for_captures(sq, piece_found, piece_found_color) {
                     return;
                 }
                 func_for_sqs(sq);
@@ -723,11 +722,12 @@ fn is_king_in_check(pos: &Position) -> bool {
 
 fn is_king_in_specific_sq_in_check(pos: &Position, sq: Sq) -> bool {
     let mut result = false;
-    for p in [R_WHITE, N_WHITE, B_WHITE, Q_WHITE, P_WHITE] {
+    for p in [B_WHITE] {
         for_each_legal_sq_from_sq(
             pos, sq,
             |sq| { },
             |cap_sq, cap_piece, cap_color| {
+                println!("cap_sq: {}", sq_to_algstring(cap_sq));
                 if cap_piece == (-p * pos.active_color) {
                     result = true;
                     // Return true to instruct
@@ -775,7 +775,7 @@ fn main() {
     let starting_fen =
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     let empty_fen = "8/8/8/8/8/8/8/8 w - - 0 1";
-    let fen = "1q6/4k3/3P4/8/1B6/8/1K6/8 b - - 0 1";
+    let fen = "8/4k3/4Q3/8/1B6/8/1K6/8 b - - 0 1";
     let pos = decode_fen(String::from(fen));
     //for move_val in position_val_at_ply(&pos, 0) {
     //    println!("{}", move_val.val);
