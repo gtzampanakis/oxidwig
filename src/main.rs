@@ -477,7 +477,7 @@ fn apply_dir_nul(fr: &mut FileRank) -> bool {
 fn for_each_legal_sq_for_pawn(
     pos: &Position, sq: Sq, fr0: &FileRank,
     color: Color, mut func_for_sqs: impl FnMut(Sq),
-    mut func_for_captures: impl FnMut(Sq, Piece, Color) -> bool
+    mut func_for_captures: impl FnMut(Sq, Piece) -> bool
 ) {
     let mut fr = FileRank{f: fr0.f, r: fr0.r};
     if color == COLOR_WHITE {
@@ -503,10 +503,9 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_ur(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                if func_for_captures(
-                    filerank_to_sq(&fr),
-                    piece_found, piece_color(piece_found)
-                ) { return; }
+                if func_for_captures(filerank_to_sq(&fr), piece_found) {
+                    return;
+                }
                 func_for_sqs(filerank_to_sq(&fr));
             }
         }
@@ -515,10 +514,9 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_ul(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                if func_for_captures(
-                    filerank_to_sq(&fr),
-                    piece_found, piece_color(piece_found)
-                ) { return; }
+                if func_for_captures(filerank_to_sq(&fr), piece_found) {
+                    return;
+                }
                 func_for_sqs(filerank_to_sq(&fr));
             }
         }
@@ -545,10 +543,9 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_dr(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                if func_for_captures(
-                    filerank_to_sq(&fr),
-                    piece_found, piece_color(piece_found)
-                ) { return; }
+                if func_for_captures(filerank_to_sq(&fr), piece_found) {
+                    return;
+                }
                 func_for_sqs(filerank_to_sq(&fr));
             }
         }
@@ -557,10 +554,9 @@ fn for_each_legal_sq_for_pawn(
             apply_dir_dl(&mut fr);
             let piece_found = piece_at_sq(pos, filerank_to_sq(&fr));
             if piece_color(piece_found) == -color {
-                if func_for_captures(
-                    filerank_to_sq(&fr),
-                    piece_found, piece_color(piece_found)
-                ) { return; }
+                if func_for_captures(filerank_to_sq(&fr), piece_found) {
+                    return;
+                }
                 func_for_sqs(filerank_to_sq(&fr));
             }
         }
@@ -570,7 +566,7 @@ fn for_each_legal_sq_for_pawn(
 fn for_each_legal_sq_from_sq(
     pos: &Position, sq: Sq,
     mut func_for_sqs: impl FnMut(Sq),
-    mut func_for_captures: impl FnMut(Sq, Piece, Color) -> bool,
+    mut func_for_captures: impl FnMut(Sq, Piece) -> bool,
     piece_override: Option<Piece>,
 ) {
     let fr0 = sq_to_filerank(sq);
@@ -617,7 +613,7 @@ fn for_each_legal_sq_from_sq(
             } else if piece_found_color == color {
                 break;
             } else {
-                if func_for_captures(sq, piece_found, piece_found_color) {
+                if func_for_captures(sq, piece_found) {
                     return;
                 }
                 func_for_sqs(sq);
@@ -643,7 +639,7 @@ fn for_each_legal_move_from_position(pos: &Position, mut func: impl FnMut(Move))
                 |sq_to: Sq| {
                     func(Move{piece: piece_found, from: sq, to: sq_to})
                 },
-                |cap_sq: Sq, cap_piece: Piece, cap_color: Color| {
+                |cap_sq, cap_piece| {
                     return false;
                 },
                 None
@@ -726,8 +722,7 @@ fn is_king_in_specific_sq_in_check(pos: &Position, sq: Sq) -> bool {
         for_each_legal_sq_from_sq(
             pos, sq,
             |sq| { },
-            |cap_sq, cap_piece, cap_color| {
-                println!("cap_sq: {}", sq_to_algstring(cap_sq));
+            |cap_sq, cap_piece| {
                 if cap_piece == (-p * pos.active_color) {
                     result = true;
                     // Return true to instruct
