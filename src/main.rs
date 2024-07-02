@@ -911,9 +911,11 @@ fn move_to_string(mov: &Move, pos: &Position) -> String {
         capture_string = "";
     }
     let check_or_checkmate_string;
-    if is_king_in_checkmate(pos) {
+    let mut new_pos = position_after_move(pos, mov);
+    expand_position(&mut new_pos);
+    if is_king_in_checkmate(&new_pos) {
         check_or_checkmate_string = "#";
-    } else if is_king_in_check(pos, false) {
+    } else if is_king_in_check(&new_pos, false) {
         check_or_checkmate_string = "+";
     } else {
         check_or_checkmate_string = "";
