@@ -6,4 +6,5 @@ echo
 echo
 echo
 date
-time cargo run --release
+#time RUST_BACKTRACE=1 cargo run --release
+time RUST_BACKTRACE=1 cargo run

@@ -136,6 +136,10 @@ struct Position {
     halfmoves: i32,
     fullmoves: i32,
     evaluation: Option<HashMap<Ply, Vec<MoveVal>>>,
+    moves: Option<Vec<Move>>,
+    is_king_in_check: Option<bool>,
+    is_king_in_checkmate: Option<bool>,
+    is_king_in_stalemate: Option<bool>,
 }
 
 fn empty_position() -> Position {
@@ -147,6 +151,10 @@ fn empty_position() -> Position {
         halfmoves: 0,
         fullmoves: 0,
         evaluation: None,
+        moves: None,
+        is_king_in_check: None,
+        is_king_in_checkmate: None,
+        is_king_in_stalemate: None,
     }
 }
 
@@ -159,6 +167,7 @@ struct Move {
     piece: Piece,
     from: Sq,
     to: Sq,
+    leads_to: Option<Position>,
 }
 
 fn sq_to_filerank(sq: Sq) -> FileRank {
@@ -181,7 +190,6 @@ fn piece_at_sq(pos: &Position, sq: Sq) -> Piece {
 }
 
 fn set_piece_at_sq(pos: &mut Position, sq: Sq, piece: Piece) {
-    //println!("Setting {} to {}, ({})", piece, sq, sq_to_algstring(sq));
     pos.placement[sq as usize] = piece;
 }
 
@@ -628,6 +636,12 @@ fn for_each_legal_sq_from_sq(
     }
 }
 
+fn does_move_lead_to_own_king_in_check(pos: &Position, mov: &Move) -> bool {
+    //println!("Checking move {} -> {}",
+    //            sq_to_algstring(mov.from), sq_to_algstring(mov.to));
+    is_king_in_check(&position_after_move(pos, mov), true)
+}
+
 fn for_each_legal_move_from_position(pos: &Position, mut func: impl FnMut(Move)) {
     for sq in 0 .. 64 {
         let piece_found = piece_at_sq(pos, sq);
@@ -637,7 +651,12 @@ fn for_each_legal_move_from_position(pos: &Position, mut func: impl FnMut(Move))
                 &pos,
                 sq,
                 |sq_to: Sq| {
-                    func(Move{piece: piece_found, from: sq, to: sq_to})
+                    func(Move{
+                        piece: piece_found,
+                        from: sq,
+                        to: sq_to,
+                        leads_to: None,
+                    })
                 },
                 |cap_sq, cap_piece| {
                     return false;
@@ -645,6 +664,56 @@ fn for_each_legal_move_from_position(pos: &Position, mut func: impl FnMut(Move))
                 None
             );
         }
+    }
+}
+
+fn set_moves_to_position(pos: &mut Position) {
+    match pos.moves {
+        Some(_) => panic!("Unexpected"),
+        None => {
+            let mut v = Vec::new();
+            for_each_legal_move_from_position(
+                pos,
+                |mov| {
+                    //println!("{}", does_move_lead_to_own_king_in_check(pos, &mov));
+                    if !does_move_lead_to_own_king_in_check(pos, &mov) {
+                        v.push(mov);
+                    }
+                }
+            );
+            pos.moves = Some(v);
+        }
+    }
+}
+
+fn expand_position(pos: &mut Position) {
+    set_is_king_in_check(pos);
+    set_moves_to_position(pos);
+    set_is_king_in_checkmate(pos);
+    set_is_king_in_stalemate(pos);
+}
+
+fn is_king_in_checkmate(pos: &Position) -> bool {
+    match &pos.moves {
+        None => panic!("Unexpected"),
+        Some(moves) => {
+            if moves.is_empty() {
+                return is_king_in_check(pos, false)
+            }
+            return false
+        },
+    }
+}
+
+fn is_king_in_stalemate(pos: &Position) -> bool {
+    match &pos.moves {
+        None => panic!("Unexpected"),
+        Some(moves) => {
+            if moves.is_empty() {
+                return !is_king_in_check(pos, false)
+            }
+            return false
+        },
     }
 }
 
@@ -661,7 +730,7 @@ fn print_move(mov: Move) {
 fn position_after_move(pos: &Position, mov: &Move) -> Position {
     let mut new_placement: [Piece; 64] = [0; 64];
     new_placement.copy_from_slice(&pos.placement);
-    Position{
+    let mut pos = Position{
         placement: new_placement,
         active_color: -pos.active_color,
         castling: pos.castling,
@@ -669,7 +738,14 @@ fn position_after_move(pos: &Position, mov: &Move) -> Position {
         halfmoves: pos.halfmoves, //TODO
         fullmoves: pos.fullmoves, // TODO
         evaluation: None,
-    }
+        moves: None,
+        is_king_in_check: None,
+        is_king_in_checkmate: None,
+        is_king_in_stalemate: None,
+    };
+    set_piece_at_sq(&mut pos, mov.from, EMPTY);
+    set_piece_at_sq(&mut pos, mov.to, mov.piece);
+    pos
 }
 
 fn position_static_value(pos: &Position) -> Val {
@@ -699,31 +775,64 @@ fn position_static_value(pos: &Position) -> Val {
     result
 }
 
-fn is_king_in_check(pos: &Position) -> bool {
+fn is_king_in_check(pos: &Position, w_toggled_active_color: bool) -> bool {
+    let sign;
+    if w_toggled_active_color { sign = -1; }
+    else { sign = 1; }
+
     let king;
-    if pos.active_color == COLOR_WHITE { king = K_WHITE; }
-    else { king = K_BLACK; }
+    if pos.active_color == COLOR_WHITE { king = K_WHITE * sign; }
+    else { king = K_BLACK * sign; }
 
     for f in 0 .. 8 {
         for r in 0 .. 8 {
             let sq = fr_to_sq(f, r);
             let piece_found = piece_at_sq(pos, sq);
             if piece_found == king {
-                return is_king_in_specific_sq_in_check(pos, sq);
+                //println!("King found at {}", sq_to_algstring(sq));
+                return is_king_in_specific_sq_in_check(
+                                pos, sq, w_toggled_active_color);
             }
         }
     }
     false // For positions without king.
 }
 
-fn is_king_in_specific_sq_in_check(pos: &Position, sq: Sq) -> bool {
+fn set_is_king_in_check(pos: &mut Position) {
+    match &pos.is_king_in_check {
+        None => { pos.is_king_in_check = Some(is_king_in_check(pos, false)); },
+        Some(_) => panic!("Unexpected"),
+    };
+}
+
+fn set_is_king_in_checkmate(pos: &mut Position) {
+    match &pos.is_king_in_checkmate {
+        None => { pos.is_king_in_checkmate = Some(is_king_in_checkmate(pos)); },
+        Some(_) => panic!("Unexpected"),
+    };
+}
+
+fn set_is_king_in_stalemate(pos: &mut Position) {
+    match &pos.is_king_in_stalemate {
+        None => { pos.is_king_in_stalemate = Some(is_king_in_stalemate(pos)); },
+        Some(_) => panic!("Unexpected"),
+    };
+}
+
+fn is_king_in_specific_sq_in_check(
+        pos: &Position, sq: Sq, w_toggled_active_color: bool,
+) -> bool {
+    //println!("Checking if king on {} is in check...", sq_to_algstring(sq));
+    let sign;
+    if w_toggled_active_color { sign = -1; }
+    else { sign = 1; }
     let mut result = false;
-    for p in [B_WHITE] {
+    for p in [R_WHITE, N_WHITE, B_WHITE, Q_WHITE, P_WHITE] {
         for_each_legal_sq_from_sq(
             pos, sq,
             |sq| { },
             |cap_sq, cap_piece| {
-                if cap_piece == (-p * pos.active_color) {
+                if cap_piece == (-p * pos.active_color * sign) {
                     result = true;
                     // Return true to instruct
                     // for_each_legal_sq_from_sq to stop.
@@ -731,7 +840,7 @@ fn is_king_in_specific_sq_in_check(pos: &Position, sq: Sq) -> bool {
                 }
                 return false;
             },
-            Some(p * pos.active_color),
+            Some(p * pos.active_color * sign),
         );
         if result {
             return result;
@@ -766,15 +875,78 @@ fn position_val_at_ply(pos: &Position, ply: Ply) -> Vec<MoveVal> {
     v
 }
 
+// TODO: print moves
+// TODO: sort moves in evaluation
+
+fn move_to_string(mov: &Move, pos: &Position) -> String {
+    let piece_moving = piece_at_sq(pos, mov.from);
+    let piece_being_captured = piece_at_sq(pos, mov.to);
+    let piece_string = match piece_moving {
+        P_WHITE => "",
+        R_WHITE => "R",
+        N_WHITE => "N",
+        B_WHITE => "B",
+        Q_WHITE => "Q",
+        K_WHITE => "K",
+        P_BLACK => "",
+        R_BLACK => "R",
+        N_BLACK => "N",
+        B_BLACK => "B",
+        Q_BLACK => "Q",
+        K_BLACK => "K",
+        _ => panic!("Unexpected"),
+    };
+    let capturing_pawn_string;
+    let capture_string;
+    if piece_being_captured != EMPTY {
+        if piece_moving == P_WHITE || piece_moving == P_BLACK {
+            capturing_pawn_string =
+                f_to_string(sq_to_filerank(mov.from).f);
+        } else {
+            capturing_pawn_string = String::from("");
+        }
+        capture_string = "x";
+    } else {
+        capturing_pawn_string = String::from("");
+        capture_string = "";
+    }
+    let check_or_checkmate_string;
+    if is_king_in_checkmate(pos) {
+        check_or_checkmate_string = "#";
+    } else if is_king_in_check(pos, false) {
+        check_or_checkmate_string = "+";
+    } else {
+        check_or_checkmate_string = "";
+    }
+    let sq_string = sq_to_algstring(mov.to);
+    let result = vec![
+        piece_string,
+        &capturing_pawn_string,
+        capture_string,
+        &sq_string,
+        check_or_checkmate_string
+    ];
+    String::from(result.join(""))
+}
+
 fn main() {
     let starting_fen =
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     let empty_fen = "8/8/8/8/8/8/8/8 w - - 0 1";
-    let fen = "8/4k3/4Q3/8/1B6/8/1K6/8 b - - 0 1";
-    let pos = decode_fen(String::from(fen));
-    //for move_val in position_val_at_ply(&pos, 0) {
-    //    println!("{}", move_val.val);
-    //}
-    println!("{}", is_king_in_check(&pos));
+    let fen_problematic_shows_no_valid_moves =
+            "8/4k3/3N1N2/4Q3/1B6/8/1K6/8 b - - 0 1";
+    let fen = 
+            "8/4k3/3P1P2/4Q3/1B6/8/1K6/8 w - - 0 1";
+    let mut pos = decode_fen(
+                    String::from(fen_problematic_shows_no_valid_moves));
+    expand_position(&mut pos);
+    match pos.moves {
+        Some(ref moves) => {
+            for mov in moves.iter() {
+                println!("{}", move_to_string(mov, &pos));
+            }
+        },
+        None => {},
+    }
     println!("Done");
 }
